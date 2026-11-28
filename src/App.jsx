@@ -1,16 +1,83 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { ShoppingBag } from 'lucide-react';
-import { PRODUCTS } from './data/products';
 import ShopView from './components/ShopView';
 import CartView from './components/CartView';
 import CheckoutView from './components/CheckoutView';
 import ConfirmationView from './components/ConfirmationView';
+import productPlaceholder from './assets/hero.png';
+
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000/api';
 
 export default function App() {
   const [page, setPage] = useState('shop'); // 'shop' | 'cart' | 'checkout' | 'confirmation'
+  const [products, setProducts] = useState([]);
+  const [productsLoading, setProductsLoading] = useState(true);
+  const [productsError, setProductsError] = useState('');
   const [cart, setCart] = useState([]);
   const [addedId, setAddedId] = useState(null);
   const [orderDetails, setOrderDetails] = useState(null);
+
+  const fetchProducts = useCallback(async () => {
+    const response = await fetch(`${API_BASE_URL}/products`, {
+      headers: { Accept: 'application/json' },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Request failed (${response.status})`);
+    }
+
+    const data = await response.json();
+    if (!Array.isArray(data)) {
+      throw new Error('The products API returned an invalid response.');
+    }
+
+    return data.map((product) => ({
+        id: product.product_id,
+        name: product.product_name,
+        price: Number(product.price),
+        category: product.category?.category_name || 'Uncategorized',
+        specs: `${product.stock_qty} in stock`,
+        image: product.image_url || productPlaceholder,
+    }));
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+
+    fetchProducts()
+      .then((data) => {
+        if (active) setProducts(data);
+      })
+      .catch((error) => {
+        if (active) {
+          setProductsError(
+            error instanceof Error ? error.message : 'Unable to load products.',
+          );
+        }
+      })
+      .finally(() => {
+        if (active) setProductsLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [fetchProducts]);
+
+  const retryProducts = async () => {
+    setProductsLoading(true);
+    setProductsError('');
+
+    try {
+      setProducts(await fetchProducts());
+    } catch (error) {
+      setProductsError(
+        error instanceof Error ? error.message : 'Unable to load products.',
+      );
+    } finally {
+      setProductsLoading(false);
+    }
+  };
 
   const handleAddToCart = (product) => {
     setCart((prev) => {
@@ -96,11 +163,22 @@ export default function App() {
       {/* Main Content */}
       <main className="max-w-6xl mx-auto px-4 py-8">
         {page === 'shop' && (
-          <ShopView
-            products={PRODUCTS}
-            onAddToCart={handleAddToCart}
-            addedId={addedId}
-          />
+          productsLoading ? (
+            <p className="text-sm text-gray-500">Loading products...</p>
+          ) : productsError ? (
+            <div role="alert" className="text-sm text-red-600">
+              <p>Could not load products: {productsError}</p>
+              <button onClick={retryProducts} className="mt-3 underline">
+                Try again
+              </button>
+            </div>
+          ) : (
+            <ShopView
+              products={products}
+              onAddToCart={handleAddToCart}
+              addedId={addedId}
+            />
+          )
         )}
 
         {page === 'cart' && (
