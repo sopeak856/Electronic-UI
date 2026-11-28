@@ -18,58 +18,29 @@ export default function App() {
   const [orderDetails, setOrderDetails] = useState(null);
 
   const fetchProducts = useCallback(async () => {
-    const response = await fetch(`${API_BASE_URL}/products`, {
-      headers: { Accept: 'application/json' },
-    });
+    try {
+      const response = await fetch(`${API_BASE_URL}/products`, {
+        headers: { Accept: 'application/json' },
+      });
 
-    if (!response.ok) {
-      throw new Error(`Request failed (${response.status})`);
-    }
+      if (!response.ok) {
+        throw new Error(`Request failed (${response.status})`);
+      }
 
-    const data = await response.json();
-    if (!Array.isArray(data)) {
-      throw new Error('The products API returned an invalid response.');
-    }
+      const data = await response.json();
+      if (!Array.isArray(data)) {
+        throw new Error('The products API returned an invalid response.');
+      }
 
-    return data.map((product) => ({
+      setProductsError('');
+      setProducts(data.map((product) => ({
         id: product.product_id,
         name: product.product_name,
         price: Number(product.price),
         category: product.category?.category_name || 'Uncategorized',
         specs: `${product.stock_qty} in stock`,
         image: product.image_url || productPlaceholder,
-    }));
-  }, []);
-
-  useEffect(() => {
-    let active = true;
-
-    fetchProducts()
-      .then((data) => {
-        if (active) setProducts(data);
-      })
-      .catch((error) => {
-        if (active) {
-          setProductsError(
-            error instanceof Error ? error.message : 'Unable to load products.',
-          );
-        }
-      })
-      .finally(() => {
-        if (active) setProductsLoading(false);
-      });
-
-    return () => {
-      active = false;
-    };
-  }, [fetchProducts]);
-
-  const retryProducts = async () => {
-    setProductsLoading(true);
-    setProductsError('');
-
-    try {
-      setProducts(await fetchProducts());
+      })));
     } catch (error) {
       setProductsError(
         error instanceof Error ? error.message : 'Unable to load products.',
@@ -77,7 +48,17 @@ export default function App() {
     } finally {
       setProductsLoading(false);
     }
+  }, []);
+
+  const retryProducts = () => {
+    setProductsLoading(true);
+    setProductsError('');
+    void fetchProducts();
   };
+
+  useEffect(() => {
+    void fetchProducts();
+  }, [fetchProducts]);
 
   const handleAddToCart = (product) => {
     setCart((prev) => {
